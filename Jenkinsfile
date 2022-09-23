@@ -20,14 +20,26 @@ node {
         }
     }
 
-    stage('Deliver') {
+    stage('Manual Approval') {
+        input message: 'Lanjut ke tahap Deploy?'
+    }
+
+    stage('Deploy') {
         def VOLUME = '$(pwd)/sources:/src'
         def IMAGE = 'cdrx/pyinstaller-linux:python2'
+
         dir(path: env.BUILD_ID) {
             unstash(name: 'compiled-results')
             sh "docker run --rm -v ${VOLUME} ${IMAGE} 'pyinstaller -F add2vals.py'"
         }
+
         archiveArtifacts artifacts: "${env.BUILD_ID}/sources/dist/add2vals", fingerprint: true
         sh "docker run --rm -v ${VOLUME} ${IMAGE} 'rm -rf build dist'"
+
+        withCredentials([sshUserPrivateKey(credentialsId: 'aws-wantotrees-key', keyFileVariable: 'secret_file', usernameVariable: 'ssh_user')]) {
+            sh "scp -o StrictHostKeyChecking=no -i ${secret_file} ${env.BUILD_ID}/sources/dist/add2vals ${ssh_user}@18.136.176.208:/home/${ssh_user}/dicoding/"
+        }
+
+        sleep(time:1, unit:"MINUTES")
     }
 }
